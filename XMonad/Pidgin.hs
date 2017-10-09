@@ -1,6 +1,20 @@
 {-# LANGUAGE TemplateHaskell, OverloadedStrings, DeriveDataTypeable, TypeSynonymInstances, MultiParamTypeClasses, FlexibleInstances, ScopedTypeVariables #-}
 
-module XMonad.Pidgin where
+-- | XMonad integration with Pidgin IM.
+module XMonad.Pidgin (
+    -- * Data types
+    PidginGroup (..),
+    PidginWorkspaces (..),
+    Target (..),
+    -- * Startup hook
+    pidginConnect,
+    -- * Manage hook
+    pidginMoveByGroup,
+    -- * Utilities
+    hasGroup,
+    pidginGroup,
+    togglePidginRoster
+  ) where
 
 import Control.Monad
 import qualified Control.Exception as E
@@ -66,19 +80,24 @@ instance Show PidginData where
   show (Pidgin _ buddies chats) = "Pidgin <" ++ show buddies ++ "> <" ++ show chats ++ ">"
   show NoDataLoaded = "<no connection>"
 
+-- | Pidgin's buddies\/chats groups specification
 data PidginGroup = 
-    AnyGroup
-  | Group String
-  | Groups [String]
+    AnyGroup                -- ^ Any group
+  | Group String            -- ^ Only one named group
+  | Groups [String]         -- ^ Only groups from the list
   deriving (Eq, Show, Read)
 
+-- | Configuration of Pidgin's workspaces
 data PidginWorkspaces =
     PidginWorkspaces {
-      moveBuddies :: [(PidginGroup, Target)],
-      defaultWorkspace :: WorkspaceId
+      moveBuddies :: [(PidginGroup, Target)]  -- ^ Set of rules for Pidgin's conversation windows
+    , defaultWorkspace :: WorkspaceId         -- ^ Default workspace for Pidgin's windows
     }
 
-data Target = Fixed WorkspaceId | Corresponding
+-- | Target workspace specification
+data Target =
+    Fixed WorkspaceId -- ^ Move to workspace with specfiied name
+  | Corresponding     -- ^ Move to workspace, which name equals to Pidgin's buddies group name.
 
 instance ExtensionClass Pidgin where
   initialValue = Nothing
@@ -127,6 +146,8 @@ pidginGetChats dbus = do
         else
           return []
 
+-- | Connect to Pidgin via DBus. This function is to be called from @startupHook@.
+-- NB: for this to work properly, you have to build xmonad with @-threaded@ RTS.
 pidginConnect :: X ()
 pidginConnect = do
   var <- io $ atomically $ newTVar NoDataLoaded
@@ -226,8 +247,7 @@ withPidgin fn = do
         NoDataLoaded -> return Nothing
         pidgin -> fn pidgin
 
--- Показать/спрятать ростер Pidgin.
-
+-- | Toggle Pidgin's roster window visibility
 togglePidginRoster :: X ()
 togglePidginRoster = do
   withPidgin $ \pidgin ->
@@ -240,6 +260,8 @@ togglePidginRoster = do
       _ -> return Nothing
   return ()
 
+-- | Get name of Pidgin's buddies group for conversation window.
+-- Returns @Nothing@ for non-Pidgin's windows.
 pidginGroup :: Query (Maybe String)
 pidginGroup = do
   cls <- className
@@ -272,6 +294,7 @@ pidginChatGroup dbus chats title = do
     Nothing -> return Nothing
     Just c -> io $ readChatGroup dbus c
 
+-- | Move Pidgin's conversation window to suitable workspace.
 pidginMoveByGroup :: PidginWorkspaces -> ManageHook
 pidginMoveByGroup cfg = do
   grp <- pidginGroup
@@ -295,6 +318,7 @@ targetWorkspace cfg group = go (moveBuddies cfg)
     getWS (Fixed name)  = name
     getWS Corresponding = group
 
+-- | Check if window belongs to specified Pidgin's buddies group
 hasGroup :: PidginGroup -> Query Bool
 hasGroup AnyGroup = return True
 hasGroup (Group name) = do
