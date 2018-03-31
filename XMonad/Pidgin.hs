@@ -39,7 +39,7 @@ import XMonad.Utils
 
 import DBus
 import DBus.Client
-import DBus.TH
+import DBus.TH.EDSL
 
 type Ints = [Int32]
 type Buddies = M.Map String Int32
