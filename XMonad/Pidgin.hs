@@ -21,12 +21,13 @@ import qualified Control.Exception as E
 import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.Map as M
-import qualified Data.HashMap.Strict as H
 import qualified Data.Text as T
 import qualified Data.Vector as V
 import Data.Maybe
 import Data.Int
 import Data.Typeable
+import qualified Data.Aeson.KeyMap as KM
+import qualified Data.Aeson.Key as K
 import Data.Yaml
 import System.Environment (getEnv)
 import System.Directory (doesFileExist)
@@ -46,21 +47,21 @@ type Buddies = M.Map String Int32
 newtype SavedBuddies = SavedBuddies (M.Map String String)
 
 instance ToJSON SavedBuddies where
-  toJSON (SavedBuddies m) = Object $ H.fromListWith cat $ map swap $ M.assocs m
+  toJSON (SavedBuddies m) = Object $ KM.fromListWith cat $ map swap $ M.assocs m
     where
-      swap (v, k) = (T.pack k, Array $ V.fromList [String $ T.pack v])
+      swap (v, k) = (K.fromText (T.pack k), Array $ V.fromList [String $ T.pack v])
       cat (Array v1) (Array v2) = Array (V.concat [v1, v2])
 
 instance FromJSON SavedBuddies where
   parseJSON (Object m) = do
-      pairs <- mapM unpack $ H.toList m
+      pairs <- mapM unpack $ KM.toList m
       return $ SavedBuddies $ M.fromList $ concat pairs
     where
       unpack (g, (Array ts)) = do
           titles <- mapM unpackTitle (V.toList ts)
-          return [(t, T.unpack g) | t <- titles]
+          return [(t, T.unpack (K.toText g)) | t <- titles]
 
-      unpack (g, x) = fail $ "SavedBuddies.fromJSON.unpack: invalid object in group " ++ T.unpack g ++ ": " ++ show x
+      unpack (g, x) = fail $ "SavedBuddies.fromJSON.unpack: invalid object in group " ++ T.unpack (K.toText g) ++ ": " ++ show x
 
       unpackTitle (String t) = return (T.unpack t)
       unpackTitle x = fail $ "SavedBuddies.fromJSON.unpackTitle: invalid object: " ++ show x
